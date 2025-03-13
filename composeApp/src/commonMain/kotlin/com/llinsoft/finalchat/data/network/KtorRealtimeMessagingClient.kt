@@ -21,17 +21,20 @@ import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 class KtorRealtimeMessagingClient(
     private val httpClient: HttpClient
 ) : RealtimeMessagingClient {
 
     private companion object {
-        const val WEB_SOCKET_URL = "ws://10.0.2.2:8080/getChatAnswer"
+        const val BASE_WEB_SOCKET_URL = "ws://10.0.2.2:8080/chat"
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var session: WebSocketSession? = null
+    private var sessionId: String? = null
     private val _incomingMessages = MutableSharedFlow<String>()
 
     init {
@@ -50,24 +53,41 @@ class KtorRealtimeMessagingClient(
     override suspend fun close() {
         session?.close()
         session = null
+        sessionId = null
         scope.coroutineContext.cancelChildren()
+    }
+
+    @OptIn(ExperimentalUuidApi::class)
+    private fun generateSessionId() {
+        if (sessionId.isNullOrEmpty()) {
+            sessionId = Uuid.random().toString()
+        }
     }
 
     private suspend fun ensureConnected() {
         if (session?.isActive == true) return
 
-        session = httpClient.webSocketSession { url(WEB_SOCKET_URL) }
+        generateSessionId()
+        session = httpClient.webSocketSession {
+            url("$BASE_WEB_SOCKET_URL?sessionId=${sessionId ?: throw IllegalStateException("No session ID")}")
+        }
         session?.let { startMessageProcessing(it) }
     }
 
     private fun startMessageProcessing(session: WebSocketSession) {
         scope.launch {
-            session
-                .incoming
-                .consumeAsFlow()
-                .filterTextMessages()
-                .catch { e -> handleError(e) }
-                .collect { text -> _incomingMessages.emit(text) }
+            try {
+                session
+                    .incoming
+                    .consumeAsFlow()
+                    .filterTextMessages()
+                    .catch { e -> handleError(e) }
+                    .collect { text -> _incomingMessages.emit(text) }
+            } catch (e: Exception) {
+                handleError(e)
+                close()
+                ensureConnected() //Attempt reconnect
+            }
         }
     }
 
@@ -83,5 +103,4 @@ class KtorRealtimeMessagingClient(
     private suspend fun WebSocketSession.sendText(text: String) {
         outgoing.send(Frame.Text(text))
     }
-
 }
