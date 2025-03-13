@@ -38,10 +38,6 @@ kotlin {
             implementation(compose.components.resources)
             implementation(compose.components.uiToolingPreview)
             implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.ktor.client.core)
-            implementation(libs.ktor.client.content.negotiation)
-            implementation(libs.ktor.client.serialization)
-            implementation(libs.ktor.client.logging)
             implementation(libs.androidx.lifecycle.viewmodel)
             implementation(libs.androidx.lifecycle.runtime.compose)
             implementation(libs.androidx.navigation.composee)
@@ -50,6 +46,8 @@ kotlin {
             implementation(libs.koin.compose)
             implementation(libs.coil)
             implementation(libs.coil.network.ktor)
+
+            implementation(libs.bundles.ktor)
         }
 
         commonTest.dependencies {
